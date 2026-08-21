@@ -176,15 +176,18 @@ export default function DutySchedulePage() {
     setSavingMember(true);
     setError("");
     setNotice("");
+    const previousMembers = members;
+    const nextMembers = members
+      .filter((member) => member.name !== name)
+      .concat({ name, account })
+      .sort((a, b) => a.name.localeCompare(b.name, "zh-Hans-CN"));
+    setMembers(nextMembers);
+    setMemberName("");
+    setMemberAccount("");
+    setNotice("正在保存对应关系...");
     try {
       if (hasSupabaseConfig) {
         await saveDutyMember(session, name, account);
-        setMemberName("");
-        setMemberAccount("");
-        setMembers((current) => {
-          const next = current.filter((member) => member.name !== name);
-          return [...next, { name, account }].sort((a, b) => a.name.localeCompare(b.name, "zh-Hans-CN"));
-        });
         setNotice("对应关系已保存");
         return;
       }
@@ -197,15 +200,13 @@ export default function DutySchedulePage() {
         }
       );
       if (!response.ok) throw new Error("人员账号保存失败");
-      setMemberName("");
-      setMemberAccount("");
-      setMembers((current) => {
-        const next = current.filter((member) => member.name !== name);
-        return [...next, { name, account }].sort((a, b) => a.name.localeCompare(b.name, "zh-Hans-CN"));
-      });
       setNotice("对应关系已保存");
     } catch (saveError) {
+      setMembers(previousMembers);
+      setMemberName(name);
+      setMemberAccount(account);
       setError(saveError.message || "人员账号保存失败");
+      setNotice("");
     } finally {
       setSavingMember(false);
     }
