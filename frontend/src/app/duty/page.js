@@ -1,6 +1,19 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import {
+  clearSession,
+  deleteDutyMember,
+  deleteDutySchedule,
+  getStoredSession,
+  hasSupabaseConfig,
+  listDutyMembers,
+  listDutySchedules,
+  saveDutyMember,
+  saveDutySchedule,
+  signIn,
+} from "../supabase-client";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_DASHBOARD_API_BASE_URL ?? "http://127.0.0.1:8000";
@@ -36,8 +49,29 @@ export default function DutySchedulePage() {
   const [savingAll, setSavingAll] = useState(false);
   const [savingMember, setSavingMember] = useState(false);
   const [error, setError] = useState("");
+  const [session, setSession] = useState(null);
+  const [authChecked, setAuthChecked] = useState(!hasSupabaseConfig);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loggingIn, setLoggingIn] = useState(false);
+
+  useEffect(() => {
+    if (hasSupabaseConfig) {
+      setSession(getStoredSession());
+      setAuthChecked(true);
+    }
+  }, []);
 
   async function loadSchedules() {
+    if (hasSupabaseConfig) {
+      const rows = await listDutySchedules(session);
+      const nextSchedules = Object.fromEntries(
+        rows.map((row) => [row.duty_date, row.person_name])
+      );
+      setSchedules(nextSchedules);
+      setSavedSchedules(nextSchedules);
+      return;
+    }
     const response = await fetch(`${API_BASE_URL}/api/duty-schedules`, {
       cache: "no-store",
     });
@@ -51,6 +85,11 @@ export default function DutySchedulePage() {
   }
 
   async function loadMembers() {
+    if (hasSupabaseConfig) {
+      const rows = await listDutyMembers(session);
+      setMembers(rows.map((row) => ({ name: row.person_name, account: row.gitcode_account })));
+      return;
+    }
     const response = await fetch(`${API_BASE_URL}/api/duty-members`, {
       cache: "no-store",
     });
@@ -71,8 +110,8 @@ export default function DutySchedulePage() {
   }
 
   useEffect(() => {
-    loadData();
-  }, [todayAnchor]);
+    if (!hasSupabaseConfig || session) loadData();
+  }, [todayAnchor, session]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -96,6 +135,11 @@ export default function DutySchedulePage() {
         .filter((date) => (schedules[date] ?? "").trim() !== (savedSchedules[date] ?? ""))
         .map(async (date) => {
           const name = (schedules[date] ?? "").trim();
+          if (hasSupabaseConfig) {
+            if (name) await saveDutySchedule(session, date, name);
+            else await deleteDutySchedule(session, date);
+            return;
+          }
           const response = name
             ? await fetch(`${API_BASE_URL}/api/duty-schedules/${date}`, {
                 method: "PUT",
@@ -129,6 +173,13 @@ export default function DutySchedulePage() {
     setSavingMember(true);
     setError("");
     try {
+      if (hasSupabaseConfig) {
+        await saveDutyMember(session, name, account);
+        setMemberName("");
+        setMemberAccount("");
+        await loadMembers();
+        return;
+      }
       const response = await fetch(
         `${API_BASE_URL}/api/duty-members/${encodeURIComponent(name)}`,
         {
@@ -152,6 +203,11 @@ export default function DutySchedulePage() {
     if (!window.confirm(`确定删除 ${name} 的账号对应关系吗？`)) return;
     setError("");
     try {
+      if (hasSupabaseConfig) {
+        await deleteDutyMember(session, name);
+        await loadMembers();
+        return;
+      }
       const response = await fetch(
         `${API_BASE_URL}/api/duty-members/${encodeURIComponent(name)}`,
         { method: "DELETE" }
@@ -163,6 +219,50 @@ export default function DutySchedulePage() {
     }
   }
 
+  async function handleLogin(event) {
+    event.preventDefault();
+    if (!email.trim() || !password) {
+      setError("请输入管理账号和密码");
+      return;
+    }
+    setLoggingIn(true);
+    setError("");
+    try {
+      const nextSession = await signIn(email.trim(), password);
+      setSession(nextSession);
+      setPassword("");
+    } catch (loginError) {
+      setError(loginError.message || "登录失败");
+    } finally {
+      setLoggingIn(false);
+    }
+  }
+
+  if (hasSupabaseConfig && !authChecked) {
+    return <main className="page"><p className="shell empty-state">正在检查登录状态...</p></main>;
+  }
+
+  if (hasSupabaseConfig && !session) {
+    return (
+      <main className="page">
+        <section className="shell hero">
+          <div className="hero-title"><span className="hero-accent" aria-hidden="true" /><h1>排班管理登录</h1></div>
+          <Link className="manage-link" href="/">返回看板</Link>
+        </section>
+        <section className="shell auth-card">
+          <h2>管理员登录</h2>
+          <p>登录后可以维护值班排班和姓名与 GitCode 账号对应关系。</p>
+          <form className="auth-form" onSubmit={handleLogin}>
+            <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="邮箱" autoComplete="username" />
+            <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="密码" autoComplete="current-password" />
+            <button className="primary-button" type="submit" disabled={loggingIn}>{loggingIn ? "登录中" : "登录"}</button>
+          </form>
+          {error ? <p className="form-error">{error}</p> : null}
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="page duty-page">
       <section className="shell hero">
@@ -170,9 +270,12 @@ export default function DutySchedulePage() {
           <span className="hero-accent" aria-hidden="true" />
           <h1>值班排班管理</h1>
         </div>
-        <a className="manage-link" href="/">
+        <div className="hero-actions">
+          <Link className="manage-link" href="/">
           返回看板
-        </a>
+          </Link>
+          {hasSupabaseConfig ? <button className="secondary-button" type="button" onClick={() => { clearSession(); setSession(null); }}>退出登录</button> : null}
+        </div>
       </section>
 
       <section className="shell duty-layout">

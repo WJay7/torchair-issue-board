@@ -66,3 +66,23 @@ create policy "issues are publicly readable"
   on public.issues for select
   using (true);
 
+-- Only signed-in management users may change schedules and member mappings.
+drop policy if exists "authenticated users can insert duty schedules" on public.duty_schedules;
+drop policy if exists "authenticated users can update duty schedules" on public.duty_schedules;
+drop policy if exists "authenticated users can delete duty schedules" on public.duty_schedules;
+create policy "authenticated users can insert duty schedules"
+  on public.duty_schedules for insert to authenticated with check (true);
+create policy "authenticated users can update duty schedules"
+  on public.duty_schedules for update to authenticated using (true) with check (true);
+create policy "authenticated users can delete duty schedules"
+  on public.duty_schedules for delete to authenticated using (true);
+
+drop policy if exists "authenticated users can insert duty members" on public.duty_members;
+drop policy if exists "authenticated users can update duty members" on public.duty_members;
+drop policy if exists "authenticated users can delete duty members" on public.duty_members;
+create policy "authenticated users can insert duty members"
+  on public.duty_members for insert to authenticated with check (true);
+create policy "authenticated users can update duty members"
+  on public.duty_members for update to authenticated using (true) with check (true);
+create policy "authenticated users can delete duty members"
+  on public.duty_members for delete to authenticated using (true);
