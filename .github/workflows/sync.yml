@@ -1,0 +1,34 @@
+name: Sync TorchAir issues
+
+on:
+  workflow_dispatch:
+  schedule:
+    # GitHub Actions schedules use UTC and may be delayed. This is not a strict
+    # one-minute scheduler; the 60-second assignment grace remains in the job.
+    - cron: "*/5 * * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Sync GitCode issues to Supabase
+        env:
+          GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
+          GITCODE_BASE_URL: https://api.gitcode.com/api/v5
+          GITCODE_OWNER: Ascend
+          GITCODE_REPO: torchair
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python -m app.cloud_sync
