@@ -75,7 +75,7 @@ async function loadDashboard() {
       );
       const rows = await response.json();
       if (response.ok && rows[0]?.payload) {
-        return rows[0].payload;
+        return applyDutyOverlay(rows[0].payload, supabaseUrl, supabaseKey);
       }
     } catch {
       // Fall back to the local FastAPI endpoint during development.
@@ -97,6 +97,54 @@ async function loadDashboard() {
   }
 
   return FALLBACK_DASHBOARD;
+}
+
+function localDateString(value = new Date()) {
+  const offset = value.getTimezoneOffset() * 60000;
+  return new Date(value.getTime() - offset).toISOString().slice(0, 10);
+}
+
+async function applyDutyOverlay(dashboard, supabaseUrl, supabaseKey) {
+  try {
+    const baseUrl = supabaseUrl.replace(/\/$/, "");
+    const headers = { apikey: supabaseKey };
+    const [scheduleResponse, memberResponse] = await Promise.all([
+      fetch(`${baseUrl}/rest/v1/duty_schedules?select=duty_date,person_name`, {
+        cache: "no-store",
+        headers,
+      }),
+      fetch(`${baseUrl}/rest/v1/duty_members?select=person_name,gitcode_account`, {
+        cache: "no-store",
+        headers,
+      }),
+    ]);
+    if (!scheduleResponse.ok || !memberResponse.ok) return dashboard;
+    const schedules = await scheduleResponse.json();
+    const members = await memberResponse.json();
+    const scheduleByDate = Object.fromEntries(
+      schedules.map((row) => [row.duty_date, row.person_name])
+    );
+    const accountByName = Object.fromEntries(
+      members.map((row) => [row.person_name, row.gitcode_account])
+    );
+    const dutyForDate = (date) => {
+      const name = scheduleByDate[date];
+      return name ? { date, name, account: accountByName[name] || null } : null;
+    };
+    const today = localDateString();
+    return {
+      ...dashboard,
+      duty: dutyForDate(today) || dashboard.duty,
+      dailyIssueDetails: (dashboard.dailyIssueDetails || []).map((item) => {
+        const duty = dutyForDate(item.date);
+        return duty
+          ? { ...item, dutyName: duty.name, dutyAccount: duty.account }
+          : item;
+      }),
+    };
+  } catch {
+    return dashboard;
+  }
 }
 
 function formatPercent(value) {

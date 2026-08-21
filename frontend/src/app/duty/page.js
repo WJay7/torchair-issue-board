@@ -54,6 +54,7 @@ export default function DutySchedulePage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loggingIn, setLoggingIn] = useState(false);
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     if (hasSupabaseConfig) {
@@ -130,6 +131,7 @@ export default function DutySchedulePage() {
   async function saveAllSchedules() {
     setSavingAll(true);
     setError("");
+    setNotice("");
     try {
       const operations = dutyDates
         .filter((date) => (schedules[date] ?? "").trim() !== (savedSchedules[date] ?? ""))
@@ -154,7 +156,8 @@ export default function DutySchedulePage() {
           }
         });
       await Promise.all(operations);
-      await loadSchedules();
+      setSavedSchedules({ ...schedules });
+      setNotice("排班已保存");
     } catch (saveError) {
       setError(saveError.message || "排班保存失败");
     } finally {
@@ -172,12 +175,17 @@ export default function DutySchedulePage() {
     }
     setSavingMember(true);
     setError("");
+    setNotice("");
     try {
       if (hasSupabaseConfig) {
         await saveDutyMember(session, name, account);
         setMemberName("");
         setMemberAccount("");
-        await loadMembers();
+        setMembers((current) => {
+          const next = current.filter((member) => member.name !== name);
+          return [...next, { name, account }].sort((a, b) => a.name.localeCompare(b.name, "zh-Hans-CN"));
+        });
+        setNotice("对应关系已保存");
         return;
       }
       const response = await fetch(
@@ -191,7 +199,11 @@ export default function DutySchedulePage() {
       if (!response.ok) throw new Error("人员账号保存失败");
       setMemberName("");
       setMemberAccount("");
-      await loadMembers();
+      setMembers((current) => {
+        const next = current.filter((member) => member.name !== name);
+        return [...next, { name, account }].sort((a, b) => a.name.localeCompare(b.name, "zh-Hans-CN"));
+      });
+      setNotice("对应关系已保存");
     } catch (saveError) {
       setError(saveError.message || "人员账号保存失败");
     } finally {
@@ -202,10 +214,12 @@ export default function DutySchedulePage() {
   async function deleteMember(name) {
     if (!window.confirm(`确定删除 ${name} 的账号对应关系吗？`)) return;
     setError("");
+    setNotice("");
     try {
       if (hasSupabaseConfig) {
         await deleteDutyMember(session, name);
-        await loadMembers();
+        setMembers((current) => current.filter((member) => member.name !== name));
+        setNotice("对应关系已删除");
         return;
       }
       const response = await fetch(
@@ -214,6 +228,7 @@ export default function DutySchedulePage() {
       );
       if (!response.ok) throw new Error("人员账号删除失败");
       await loadMembers();
+      setNotice("对应关系已删除");
     } catch (deleteError) {
       setError(deleteError.message || "人员账号删除失败");
     }
@@ -362,6 +377,7 @@ export default function DutySchedulePage() {
         </section>
       </section>
       {error ? <p className="shell form-error page-error">{error}</p> : null}
+      {notice ? <p className="shell form-success page-error">{notice}</p> : null}
     </main>
   );
 }
