@@ -1,5 +1,6 @@
-export const dynamic = "force-dynamic";
+"use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import RefreshControls from "./refresh-controls";
 
@@ -60,6 +61,27 @@ const FALLBACK_DASHBOARD = {
 };
 
 async function loadDashboard() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
+  if (supabaseUrl && supabaseKey) {
+    try {
+      const response = await fetch(
+        `${supabaseUrl.replace(/\/$/, "")}/rest/v1/dashboard_snapshots?id=eq.1&select=payload`,
+        {
+          cache: "no-store",
+          headers: { apikey: supabaseKey },
+        }
+      );
+      const rows = await response.json();
+      if (response.ok && rows[0]?.payload) {
+        return rows[0].payload;
+      }
+    } catch {
+      // Fall back to the local FastAPI endpoint during development.
+    }
+  }
+
   const baseUrl = process.env.DASHBOARD_API_BASE_URL ?? "http://127.0.0.1:8000";
 
   try {
@@ -86,8 +108,7 @@ function formatShortDate(value) {
   return `${Number(month)}.${Number(day)}`;
 }
 
-export default async function Home() {
-  const dashboard = await loadDashboard();
+function DashboardView({ dashboard }) {
   const summaryCards = dashboard.summary ?? FALLBACK_DASHBOARD.summary;
   const duty = dashboard.duty ?? FALLBACK_DASHBOARD.duty;
   const ownerRanking = dashboard.ownerRanking ?? FALLBACK_DASHBOARD.ownerRanking;
@@ -290,4 +311,18 @@ export default async function Home() {
       </section>
     </main>
   );
+}
+
+export default function Home() {
+  const [dashboard, setDashboard] = useState(null);
+
+  useEffect(() => {
+    loadDashboard().then(setDashboard);
+  }, []);
+
+  if (!dashboard) {
+    return <main className="page"><p className="empty-state">正在读取看板数据...</p></main>;
+  }
+
+  return <DashboardView dashboard={dashboard} />;
 }

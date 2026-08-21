@@ -29,7 +29,12 @@ GitCode Token 放进前端，也不能给匿名访客开放值班表写权限。
 - `GITCODE_TOKEN`
 - `SUPABASE_URL`
 - `SUPABASE_SECRET_KEY`
+- `SUPABASE_PUBLISHABLE_KEY`
 
 其中 `SUPABASE_SECRET_KEY` 只能用于 GitHub Actions，不能写入前端代码。
 如果控制台只有旧版 `service_role`，则将它保存为 GitHub Secret
 `SUPABASE_SERVICE_ROLE_KEY`，同步任务也能兼容。
+
+GitHub Pages 构建还需要 `SUPABASE_PUBLISHABLE_KEY`。它可以出现在公开的
+前端代码中，但只能配合数据库的只读 RLS 策略使用；不要把 `secret key`
+放进这个变量。
