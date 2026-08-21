@@ -10,6 +10,7 @@ import json
 import os
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
+from urllib.error import HTTPError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
@@ -28,7 +29,10 @@ class SupabaseError(RuntimeError):
 
 class SupabaseRestClient:
     def __init__(self, url: str, service_key: str):
-        self.base_url = f"{url.rstrip('/')}/rest/v1"
+        normalized_url = url.rstrip("/")
+        if normalized_url.endswith("/rest/v1"):
+            normalized_url = normalized_url[: -len("/rest/v1")]
+        self.base_url = f"{normalized_url}/rest/v1"
         self.service_key = service_key
 
     def request(
@@ -52,8 +56,13 @@ class SupabaseRestClient:
         try:
             with urlopen(request, timeout=30) as response:
                 content = response.read().decode("utf-8")
+        except HTTPError as error:
+            detail = error.read().decode("utf-8", errors="replace")
+            raise SupabaseError(
+                f"Supabase request failed: HTTP {error.code} {endpoint}: {detail}"
+            ) from error
         except Exception as error:  # urllib exposes several platform-specific errors
-            raise SupabaseError(f"Supabase request failed: {error}") from error
+            raise SupabaseError(f"Supabase request failed: {endpoint}: {error}") from error
         if not content:
             return None
         try:
