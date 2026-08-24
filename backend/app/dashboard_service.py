@@ -117,7 +117,7 @@ def build_dashboard(
     daily_issue_details = []
     for issue in issues:
         created_day = _day_key(issue.get("created_at"))
-        if created_day not in daily:
+        if not created_day:
             continue
         issue_number = str(issue.get("number") or issue.get("id") or "")
         issue_title = str(issue.get("title") or f"Issue #{issue_number}")

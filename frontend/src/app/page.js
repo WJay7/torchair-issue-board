@@ -157,6 +157,7 @@ function formatShortDate(value) {
 }
 
 function DashboardView({ dashboard }) {
+  const [issueFilter, setIssueFilter] = useState("all");
   const summaryCards = dashboard.summary ?? FALLBACK_DASHBOARD.summary;
   const duty = dashboard.duty ?? FALLBACK_DASHBOARD.duty;
   const ownerRanking = dashboard.ownerRanking ?? FALLBACK_DASHBOARD.ownerRanking;
@@ -164,8 +165,13 @@ function DashboardView({ dashboard }) {
     dashboard.dailyIssueStats ?? FALLBACK_DASHBOARD.dailyIssueStats;
   const dailyIssueDetails =
     dashboard.dailyIssueDetails ?? FALLBACK_DASHBOARD.dailyIssueDetails;
+  const filteredIssueDetails = dailyIssueDetails.filter((item) => {
+    if (issueFilter === "open") return item.issueState === "开启";
+    if (issueFilter === "closed") return item.issueState === "关闭";
+    return true;
+  });
   const dailyIssueGroups = Object.values(
-    dailyIssueDetails.reduce((groups, item) => {
+    filteredIssueDetails.reduce((groups, item) => {
       const key = `${item.date}-${item.dutyName}-${item.dutyAccount ?? ""}`;
       if (!groups[key]) {
         groups[key] = {
@@ -271,6 +277,21 @@ function DashboardView({ dashboard }) {
       </section>
 
       <section className="shell section">
+        <div className="detail-toolbar">
+          <div className="detail-filter" role="group" aria-label="Issue 状态筛选">
+            {[["all", "全部"], ["open", "已开启"], ["closed", "已关闭"]].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                className={`detail-filter-button ${issueFilter === value ? "is-active" : ""}`}
+                aria-pressed={issueFilter === value}
+                onClick={() => setIssueFilter(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="detail-table" role="table" aria-label="每日 issue 明细">
           <div className="detail-row detail-head" role="row">
             <span role="columnheader">日期</span>
@@ -318,7 +339,7 @@ function DashboardView({ dashboard }) {
                   ))}
                 </span>
               </div>
-            )) : <div className="detail-empty">近 25 天暂无 issue 明细</div>}
+            )) : <div className="detail-empty">暂无符合条件的 issue 明细</div>}
           </div>
         </div>
       </section>

@@ -334,6 +334,12 @@ dl {
   font-weight: 600;
 }
 
+.form-success {
+  color: #16834b;
+  background: #effaf4;
+  border-color: #b8e6ca;
+}
+
 .schedule-table {
   overflow: hidden;
   border: 1px solid var(--line);
@@ -778,6 +784,40 @@ dl {
   border-radius: 8px;
   background: var(--panel);
   box-shadow: var(--shadow);
+}
+
+.detail-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
+.detail-filter {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel);
+}
+
+.detail-filter-button {
+  min-height: 32px;
+  padding: 5px 13px;
+  border: 0;
+  border-radius: 5px;
+  color: var(--muted);
+  background: transparent;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.detail-filter-button:hover,
+.detail-filter-button.is-active {
+  color: #fff;
+  background: var(--brand);
 }
 
 .detail-row {
