@@ -68,6 +68,15 @@ dl {
   min-width: 0;
 }
 
+.site-logo {
+  width: 72px;
+  height: 34px;
+  flex: 0 0 auto;
+  object-fit: contain;
+  object-position: center;
+  border-radius: 4px;
+}
+
 .hero-accent {
   flex: none;
   width: 6px;

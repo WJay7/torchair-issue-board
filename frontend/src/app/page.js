@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import RefreshControls from "./refresh-controls";
 
+const ASSET_BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
+
 const DEFAULT_OWNER_STATS = [
   { name: "李明", total: 42, closed: 24 },
   { name: "王雪", total: 31, closed: 19 },
@@ -226,6 +228,7 @@ function DashboardView({ dashboard }) {
     <main className="page">
       <section className="shell hero">
         <div className="hero-title">
+          <img className="site-logo" src={`${ASSET_BASE_PATH}/torchair-logo.png`} alt="TorchAir" />
           <span className="hero-accent" aria-hidden="true" />
           <h1>TorchAir issue</h1>
         </div>

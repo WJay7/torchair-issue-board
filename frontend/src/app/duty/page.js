@@ -19,6 +19,7 @@ const API_BASE_URL =
   process.env.NEXT_PUBLIC_DASHBOARD_API_BASE_URL ?? "http://127.0.0.1:8000";
 const DUTY_PAST_DAYS = 7;
 const DUTY_FUTURE_DAYS = 30;
+const ASSET_BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
 function localDateString(value = new Date()) {
   const offset = value.getTimezoneOffset() * 60000;
@@ -262,7 +263,7 @@ export default function DutySchedulePage() {
     return (
       <main className="page">
         <section className="shell hero">
-          <div className="hero-title"><span className="hero-accent" aria-hidden="true" /><h1>排班管理登录</h1></div>
+          <div className="hero-title"><img className="site-logo" src={`${ASSET_BASE_PATH}/torchair-logo.png`} alt="TorchAir" /><span className="hero-accent" aria-hidden="true" /><h1>排班管理登录</h1></div>
           <Link className="manage-link" href="/">返回看板</Link>
         </section>
         <section className="shell auth-card">
@@ -283,6 +284,7 @@ export default function DutySchedulePage() {
     <main className="page duty-page">
       <section className="shell hero">
         <div className="hero-title">
+          <img className="site-logo" src={`${ASSET_BASE_PATH}/torchair-logo.png`} alt="TorchAir" />
           <span className="hero-accent" aria-hidden="true" />
           <h1>值班排班管理</h1>
         </div>
