@@ -108,7 +108,7 @@ async function applyDutyOverlay(dashboard, supabaseUrl, supabaseKey) {
   try {
     const baseUrl = supabaseUrl.replace(/\/$/, "");
     const headers = { apikey: supabaseKey };
-    const [scheduleResponse, memberResponse] = await Promise.all([
+    const [scheduleResponse, memberResponse, issueResponse] = await Promise.all([
       fetch(`${baseUrl}/rest/v1/duty_schedules?select=duty_date,person_name`, {
         cache: "no-store",
         headers,
@@ -117,10 +117,15 @@ async function applyDutyOverlay(dashboard, supabaseUrl, supabaseKey) {
         cache: "no-store",
         headers,
       }),
+      fetch(`${baseUrl}/rest/v1/issues?select=issue_number,title,state,owner,created_at,issue_url,raw_payload&order=created_at.desc`, {
+        cache: "no-store",
+        headers,
+      }),
     ]);
-    if (!scheduleResponse.ok || !memberResponse.ok) return dashboard;
+    if (!scheduleResponse.ok || !memberResponse.ok || !issueResponse.ok) return dashboard;
     const schedules = await scheduleResponse.json();
     const members = await memberResponse.json();
+    const issues = await issueResponse.json();
     const scheduleByDate = Object.fromEntries(
       schedules.map((row) => [row.duty_date, row.person_name])
     );
@@ -131,11 +136,37 @@ async function applyDutyOverlay(dashboard, supabaseUrl, supabaseKey) {
       const name = scheduleByDate[date];
       return name ? { date, name, account: accountByName[name] || null } : null;
     };
+    const issueOwner = (issue) => {
+      if (issue.owner) return issue.owner;
+      const payload = issue.raw_payload;
+      const assignee = payload?.assignee;
+      if (assignee && typeof assignee === "object") {
+        return assignee.name || assignee.login || "未分配";
+      }
+      if (typeof assignee === "string" && assignee.trim()) return assignee.trim();
+      return "未分配";
+    };
+    const allIssueDetails = issues
+      .filter((issue) => issue.created_at)
+      .map((issue) => {
+        const date = issue.created_at.slice(0, 10);
+        const duty = dutyForDate(date) || { date, name: "未排班", account: null };
+        return {
+          date,
+          dutyName: duty.name,
+          dutyAccount: duty.account,
+          issueNumber: String(issue.issue_number || ""),
+          issueTitle: issue.title || `Issue #${issue.issue_number}`,
+          issueState: String(issue.state).toLowerCase() === "closed" ? "关闭" : "开启",
+          issueUrl: issue.issue_url,
+          owner: issueOwner(issue),
+        };
+      });
     const today = localDateString();
     return {
       ...dashboard,
       duty: dutyForDate(today) || dashboard.duty,
-      dailyIssueDetails: (dashboard.dailyIssueDetails || []).map((item) => {
+      dailyIssueDetails: allIssueDetails.length ? allIssueDetails : (dashboard.dailyIssueDetails || []).map((item) => {
         const duty = dutyForDate(item.date);
         return duty
           ? { ...item, dutyName: duty.name, dutyAccount: duty.account }
