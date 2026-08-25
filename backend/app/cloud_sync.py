@@ -20,9 +20,6 @@ from .gitcode_client import GitCodeClient, GitCodeApiError
 from .schemas import DutyInfo
 
 
-GRACE_SECONDS = 60
-
-
 class SupabaseError(RuntimeError):
     pass
 
@@ -178,7 +175,6 @@ def run() -> None:
     supabase.upsert("issue_sync", new_sync_rows)
     sync_by_key.update({row["issue_key"]: row for row in new_sync_rows})
 
-    cutoff = now - timedelta(seconds=GRACE_SECONDS)
     assigned_any = False
     valid_accounts: dict[str, bool] = {}
     assignment_count = 0
@@ -198,9 +194,6 @@ def run() -> None:
             continue
         # A completed row with no current assignee is eligible for repair.
         if row.get("assignment_status") not in {"pending", "complete"}:
-            continue
-        first_seen = datetime.fromisoformat(row["first_seen_at"].replace("Z", "+00:00"))
-        if row.get("assignment_status") == "pending" and first_seen > cutoff:
             continue
         duty_day = _created_day(issue)
         duty = history.get(duty_day or "")

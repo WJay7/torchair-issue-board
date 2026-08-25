@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-const REFRESH_SECONDS = 60;
+const REFRESH_SECONDS = 300;
 
 export default function RefreshControls({ onRefresh }) {
   const [secondsLeft, setSecondsLeft] = useState(REFRESH_SECONDS);
@@ -19,7 +19,7 @@ export default function RefreshControls({ onRefresh }) {
     refreshingRef.current = true;
     setRefreshing(true);
     try {
-      await onRefreshRef.current?.();
+      await onRefreshRef.current?.({ trigger: true });
     } finally {
       refreshingRef.current = false;
       setRefreshing(false);

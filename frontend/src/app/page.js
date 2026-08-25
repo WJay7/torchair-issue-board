@@ -69,7 +69,7 @@ async function loadDashboard() {
   if (supabaseUrl && supabaseKey) {
     try {
       const response = await fetch(
-        `${supabaseUrl.replace(/\/$/, "")}/rest/v1/dashboard_snapshots?id=eq.1&select=payload`,
+        `${supabaseUrl.replace(/\/$/, "")}/rest/v1/dashboard_snapshots?id=eq.1&select=payload,generated_at`,
         {
           cache: "no-store",
           headers: { apikey: supabaseKey },
@@ -77,7 +77,11 @@ async function loadDashboard() {
       );
       const rows = await response.json();
       if (response.ok && rows[0]?.payload) {
-        return applyDutyOverlay(rows[0].payload, supabaseUrl, supabaseKey);
+        return applyDutyOverlay(
+          { ...rows[0].payload, __generatedAt: rows[0].generated_at },
+          supabaseUrl,
+          supabaseKey
+        );
       }
     } catch {
       // Fall back to the local FastAPI endpoint during development.
@@ -178,6 +182,23 @@ async function applyDutyOverlay(dashboard, supabaseUrl, supabaseKey) {
   } catch {
     return dashboard;
   }
+}
+
+async function requestCloudSync() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  if (!supabaseUrl || !supabaseKey) return;
+
+  const response = await fetch(
+    `${supabaseUrl.replace(/\/$/, "")}/functions/v1/trigger-sync`,
+    {
+      method: "POST",
+      headers: { apikey: supabaseKey, "Content-Type": "application/json" },
+      body: "{}",
+    }
+  );
+  if (!response.ok) throw new Error("同步任务触发失败");
+  return response.json();
 }
 
 function formatPercent(value) {
@@ -424,10 +445,20 @@ function DashboardView({ dashboard, onRefresh }) {
 export default function Home() {
   const [dashboard, setDashboard] = useState(null);
 
-  const refreshDashboard = useCallback(async () => {
-    const nextDashboard = await loadDashboard();
+  const refreshDashboard = useCallback(async ({ trigger = false } = {}) => {
+    const triggerResult = trigger ? await requestCloudSync() : null;
+
+    const previousGeneratedAt = dashboard?.__generatedAt;
+    let nextDashboard = await loadDashboard();
+    if (trigger && triggerResult?.accepted && previousGeneratedAt) {
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        if (nextDashboard.__generatedAt !== previousGeneratedAt) break;
+        await new Promise((resolve) => window.setTimeout(resolve, 3000));
+        nextDashboard = await loadDashboard();
+      }
+    }
     setDashboard(nextDashboard);
-  }, []);
+  }, [dashboard?.__generatedAt]);
 
   useEffect(() => {
     refreshDashboard();

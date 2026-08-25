@@ -184,8 +184,10 @@ class DutyScheduleRepository:
             ).fetchall()
         return [row[0] for row in rows]
 
-    def eligible_issue_keys(self, issue_keys: list[str], seen_before: str) -> list[str]:
-        """Return old pending or never-assigned Issues ready for compensation."""
+    def eligible_issue_keys(
+        self, issue_keys: list[str], _seen_before: str | None = None
+    ) -> list[str]:
+        """Return every tracked Issue that is pending or still unassigned."""
         if not issue_keys:
             return []
 
@@ -195,10 +197,9 @@ class DutyScheduleRepository:
                 f"""
                 SELECT issue_key FROM issue_sync
                 WHERE issue_key IN ({placeholders})
-                  AND first_seen_at <= ?
                   AND (assignment_status = 'pending' OR assigned_at IS NULL)
                 """,
-                [*issue_keys, seen_before],
+                issue_keys,
             ).fetchall()
         return [row[0] for row in rows]
 

@@ -40,6 +40,14 @@ create table if not exists public.issue_sync (
   assigned_to text
 );
 
+-- Public refresh requests are rate-limited by the Supabase Edge Function.
+create table if not exists public.sync_control (
+  id smallint primary key default 1 check (id = 1),
+  last_requested_at timestamptz
+);
+insert into public.sync_control (id) values (1)
+on conflict (id) do nothing;
+
 create index if not exists issues_created_at_idx on public.issues (created_at);
 create index if not exists issues_state_idx on public.issues (state);
 
@@ -55,6 +63,7 @@ alter table public.duty_schedules enable row level security;
 alter table public.duty_members enable row level security;
 alter table public.issues enable row level security;
 alter table public.issue_sync enable row level security;
+alter table public.sync_control enable row level security;
 
 create policy "duty schedules are publicly readable"
   on public.duty_schedules for select

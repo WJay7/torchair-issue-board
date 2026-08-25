@@ -3,8 +3,7 @@ name: Sync TorchAir issues
 on:
   workflow_dispatch:
   schedule:
-    # GitHub Actions schedules use UTC and may be delayed. This is not a strict
-    # one-minute scheduler; the 60-second assignment grace remains in the job.
+    # GitHub Actions schedules use UTC and may be delayed.
     - cron: "*/5 * * * *"
 
 permissions:

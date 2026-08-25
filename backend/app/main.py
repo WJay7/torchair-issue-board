@@ -18,8 +18,6 @@ from .schemas import (
 
 app = FastAPI(title="TorchAir Issue API", version="0.1.0")
 
-ASSIGNMENT_GRACE_SECONDS = 60
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -130,12 +128,7 @@ def dashboard():
         now = datetime.now().astimezone()
         seen_at = now.isoformat(timespec="seconds")
         duty_repository().register_issue_keys(list(issue_by_key), seen_at)
-        assignment_cutoff = (
-            now - timedelta(seconds=ASSIGNMENT_GRACE_SECONDS)
-        ).isoformat(timespec="seconds")
-        candidate_keys = duty_repository().eligible_issue_keys(
-            list(issue_by_key), assignment_cutoff
-        )
+        candidate_keys = duty_repository().eligible_issue_keys(list(issue_by_key))
         assigned_count = 0
         for issue_key in candidate_keys:
             issue = issue_by_key[issue_key]
