@@ -189,6 +189,11 @@ function formatShortDate(value) {
   return `${Number(month)}.${Number(day)}`;
 }
 
+function formatIssueDate(value) {
+  const [year, month, day] = value.split("-");
+  return `${month.padStart(2, "0")}.${day.padStart(2, "0")}`;
+}
+
 function DashboardView({ dashboard }) {
   const [issueFilter, setIssueFilter] = useState("all");
   const summaryCards = dashboard.summary ?? FALLBACK_DASHBOARD.summary;
@@ -335,7 +340,7 @@ function DashboardView({ dashboard }) {
           <div className="detail-scroll" role="rowgroup">
             {dailyIssueGroups.length ? dailyIssueGroups.map((group) => (
               <div key={`${group.date}-${group.dutyName}`} className="detail-row" role="row">
-                <span role="cell" data-label="日期">{formatShortDate(group.date)}</span>
+                <span role="cell" data-label="日期">{formatIssueDate(group.date)}</span>
                 <span role="cell" data-label="值班人员" className="duty-detail-cell">
                   <span>{group.dutyName}</span>
                   {group.dutyAccount ? <small>@{group.dutyAccount}</small> : null}
