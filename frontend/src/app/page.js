@@ -233,7 +233,7 @@ function DashboardView({ dashboard }) {
           <h1>TorchAir issue</h1>
         </div>
         <div className="hero-meta" aria-label="今日值班信息">
-          <span>{duty.date}</span>
+          <span>{formatShortDate(duty.date)}</span>
           <span className="hero-duty">
             <span className="duty-badge">值班</span>
             <strong>{duty.name}</strong>

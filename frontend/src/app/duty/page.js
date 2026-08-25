@@ -26,6 +26,11 @@ function localDateString(value = new Date()) {
   return new Date(value.getTime() - offset).toISOString().slice(0, 10);
 }
 
+function formatShortDate(value) {
+  const [year, month, day] = value.split("-");
+  return `${Number(month)}.${Number(day)}`;
+}
+
 function buildDutyDates() {
   const today = new Date();
   return Array.from(
@@ -320,7 +325,7 @@ export default function DutySchedulePage() {
             </div>
             {dutyDates.map((date) => (
               <div className="schedule-row" key={date}>
-                <span>{date}</span>
+                <span title={date}>{formatShortDate(date)}</span>
                 <input
                   className="schedule-name-input"
                   value={schedules[date] ?? ""}

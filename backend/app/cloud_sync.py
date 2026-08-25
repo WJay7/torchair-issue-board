@@ -112,7 +112,9 @@ def _created_day(issue: dict[str, Any]) -> str | None:
     if not isinstance(value, str):
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).date().isoformat()
+        created_at = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        china_timezone = timezone(timedelta(hours=8))
+        return created_at.astimezone(china_timezone).date().isoformat()
     except ValueError:
         return None
 
@@ -178,27 +180,48 @@ def run() -> None:
 
     cutoff = now - timedelta(seconds=GRACE_SECONDS)
     assigned_any = False
+    valid_accounts: dict[str, bool] = {}
+    assignment_count = 0
     for key, row in sync_by_key.items():
         issue = issue_by_key.get(key)
-        if not issue or row.get("assignment_status") != "pending":
+        if not issue:
+            continue
+        issue_state = str(issue.get("state", "")).lower()
+        if issue_state not in {"open", "opened"} or _has_assignee(issue):
+            if row.get("assignment_status") == "pending" and _has_assignee(issue):
+                supabase.request(
+                    "PATCH",
+                    "issue_sync",
+                    {"assignment_status": "complete", "assigned_at": now.isoformat(timespec="seconds")},
+                    f"?issue_key=eq.{quote(key, safe='')}"
+                )
+            continue
+        # A completed row with no current assignee is eligible for repair.
+        if row.get("assignment_status") not in {"pending", "complete"}:
             continue
         first_seen = datetime.fromisoformat(row["first_seen_at"].replace("Z", "+00:00"))
-        if first_seen > cutoff or str(issue.get("state", "")).lower() not in {"open", "opened"}:
-            continue
-        if _has_assignee(issue):
-            supabase.request(
-                "PATCH",
-                "issue_sync",
-                {"assignment_status": "complete", "assigned_at": now.isoformat(timespec="seconds")},
-                f"?issue_key=eq.{quote(key, safe='')}"
-            )
+        if row.get("assignment_status") == "pending" and first_seen > cutoff:
             continue
         duty_day = _created_day(issue)
         duty = history.get(duty_day or "")
         if not duty or not duty.account:
             continue
+        if duty.account not in valid_accounts:
+            valid_accounts[duty.account] = gitcode.user_exists(duty.account)
+        if not valid_accounts[duty.account]:
+            print(f"Assignment skipped for issue #{issue.get('number')}: GitCode user not found: {duty.account}")
+            continue
         number = str(issue.get("number") or issue.get("id"))
-        gitcode.update_issue_assignee(number, duty.account)
+        try:
+            gitcode.update_issue_assignee(number, duty.account)
+        except GitCodeApiError as error:
+            # Keep the row pending so correcting the duty-member mapping makes
+            # the next scheduled run retry the assignment automatically.
+            print(
+                f"Assignment skipped for issue #{number} to "
+                f"{duty.account}: {error}"
+            )
+            continue
         supabase.request(
             "PATCH",
             "issue_sync",
@@ -210,6 +233,7 @@ def run() -> None:
             f"?issue_key=eq.{quote(key, safe='')}"
         )
         assigned_any = True
+        assignment_count += 1
 
     if assigned_any:
         issues = gitcode.list_all_issues()
@@ -247,7 +271,7 @@ def run() -> None:
         "dashboard_snapshots",
         [{"id": 1, "payload": snapshot, "generated_at": now.isoformat(timespec="seconds")}],
     )
-    print(f"Synced {len(issues)} issues; assigned={assigned_any}")
+    print(f"Synced {len(issues)} issues; assigned={assignment_count}; any={assigned_any}")
 
 
 if __name__ == "__main__":

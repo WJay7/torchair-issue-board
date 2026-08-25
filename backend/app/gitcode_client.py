@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 from .config import Settings
@@ -79,3 +79,21 @@ class GitCodeClient:
             ) from error
         except URLError as error:
             raise GitCodeApiError(f"Could not update GitCode Issue: {error.reason}") from error
+
+    def user_exists(self, username: str) -> bool:
+        endpoint = (
+            f"{self.settings.gitcode_base_url.rstrip('/')}/users/"
+            f"{quote(username, safe='')}?{urlencode({'access_token': self.settings.gitcode_token})}"
+        )
+        try:
+            with urlopen(endpoint, timeout=15):  # nosec B310: URL comes from local config
+                return True
+        except HTTPError as error:
+            if error.code == 404:
+                return False
+            detail = error.read().decode("utf-8", errors="replace")
+            raise GitCodeApiError(
+                f"GitCode user validation returned HTTP {error.code}: {detail}"
+            ) from error
+        except URLError as error:
+            raise GitCodeApiError(f"Could not validate GitCode user: {error.reason}") from error
