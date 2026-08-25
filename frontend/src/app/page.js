@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import RefreshControls from "./refresh-controls";
 
@@ -194,7 +194,7 @@ function formatIssueDate(value) {
   return `${month.padStart(2, "0")}.${day.padStart(2, "0")}`;
 }
 
-function DashboardView({ dashboard }) {
+function DashboardView({ dashboard, onRefresh }) {
   const [issueFilter, setIssueFilter] = useState("all");
   const summaryCards = dashboard.summary ?? FALLBACK_DASHBOARD.summary;
   const duty = dashboard.duty ?? FALLBACK_DASHBOARD.duty;
@@ -247,7 +247,7 @@ function DashboardView({ dashboard }) {
           <Link className="manage-link" href="/duty">
             排班管理
           </Link>
-          <RefreshControls />
+          <RefreshControls onRefresh={onRefresh} />
         </div>
       </section>
 
@@ -424,13 +424,18 @@ function DashboardView({ dashboard }) {
 export default function Home() {
   const [dashboard, setDashboard] = useState(null);
 
-  useEffect(() => {
-    loadDashboard().then(setDashboard);
+  const refreshDashboard = useCallback(async () => {
+    const nextDashboard = await loadDashboard();
+    setDashboard(nextDashboard);
   }, []);
+
+  useEffect(() => {
+    refreshDashboard();
+  }, [refreshDashboard]);
 
   if (!dashboard) {
     return <main className="page"><p className="empty-state">正在读取看板数据...</p></main>;
   }
 
-  return <DashboardView dashboard={dashboard} />;
+  return <DashboardView dashboard={dashboard} onRefresh={refreshDashboard} />;
 }

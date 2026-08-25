@@ -1,19 +1,38 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const REFRESH_SECONDS = 60;
 
-export default function RefreshControls() {
+export default function RefreshControls({ onRefresh }) {
   const [secondsLeft, setSecondsLeft] = useState(REFRESH_SECONDS);
   const [refreshing, setRefreshing] = useState(false);
+  const refreshingRef = useRef(false);
+  const onRefreshRef = useRef(onRefresh);
+
+  useEffect(() => {
+    onRefreshRef.current = onRefresh;
+  }, [onRefresh]);
+
+  async function refreshNow() {
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
+    setRefreshing(true);
+    try {
+      await onRefreshRef.current?.();
+    } finally {
+      refreshingRef.current = false;
+      setRefreshing(false);
+      setSecondsLeft(REFRESH_SECONDS);
+    }
+  }
 
   useEffect(() => {
     const timer = window.setInterval(() => {
       setSecondsLeft((current) => {
         if (current <= 1) {
-          window.location.reload();
-          return REFRESH_SECONDS;
+          void refreshNow();
+          return current;
         }
         return current - 1;
       });
@@ -21,12 +40,6 @@ export default function RefreshControls() {
 
     return () => window.clearInterval(timer);
   }, []);
-
-  function refreshNow() {
-    if (refreshing) return;
-    setRefreshing(true);
-    window.location.reload();
-  }
 
   return (
     <span className="refresh-controls" aria-label="看板刷新控制">
