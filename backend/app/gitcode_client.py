@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
@@ -14,8 +15,37 @@ class GitCodeApiError(RuntimeError):
 
 
 class GitCodeClient:
+    REQUEST_TIMEOUT_SECONDS = 45
+    MAX_RETRIES = 3
+
     def __init__(self, settings: Settings):
         self.settings = settings
+
+    def _open(self, request: str | Request):
+        """Retry transient GitCode network/server failures before aborting a sync."""
+        for attempt in range(self.MAX_RETRIES):
+            try:
+                return urlopen(request, timeout=self.REQUEST_TIMEOUT_SECONDS)  # nosec B310
+            except HTTPError as error:
+                if error.code not in {408, 429} and error.code < 500:
+                    raise
+                if attempt == self.MAX_RETRIES - 1:
+                    raise
+            except (TimeoutError, URLError):
+                if attempt == self.MAX_RETRIES - 1:
+                    raise
+            time.sleep(2**attempt)
+
+    def _get_json(self, endpoint: str) -> Any:
+        """Retry when GitCode stalls while reading a response body."""
+        for attempt in range(self.MAX_RETRIES):
+            try:
+                with self._open(endpoint) as response:
+                    return json.loads(response.read().decode("utf-8"))
+            except TimeoutError:
+                if attempt == self.MAX_RETRIES - 1:
+                    raise
+                time.sleep(2**attempt)
 
     def list_all_issues(self) -> list[dict[str, Any]]:
         """Fetch every Issue from the configured repository, 100 at a time."""
@@ -37,8 +67,7 @@ class GitCodeClient:
             )
 
             try:
-                with urlopen(endpoint, timeout=15) as response:  # nosec B310: URL comes from local config
-                    payload = json.loads(response.read().decode("utf-8"))
+                payload = self._get_json(endpoint)
             except HTTPError as error:
                 detail = error.read().decode("utf-8", errors="replace")
                 raise GitCodeApiError(f"GitCode returned HTTP {error.code}: {detail}") from error
@@ -70,7 +99,7 @@ class GitCodeClient:
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
         try:
-            with urlopen(request, timeout=15):  # nosec B310: URL comes from local config
+            with self._open(request):
                 return
         except HTTPError as error:
             detail = error.read().decode("utf-8", errors="replace")
@@ -86,7 +115,7 @@ class GitCodeClient:
             f"{quote(username, safe='')}?{urlencode({'access_token': self.settings.gitcode_token})}"
         )
         try:
-            with urlopen(endpoint, timeout=15):  # nosec B310: URL comes from local config
+            with self._open(endpoint):
                 return True
         except HTTPError as error:
             if error.code == 404:
