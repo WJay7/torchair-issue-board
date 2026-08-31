@@ -118,17 +118,12 @@ def _creator_account(issue: dict[str, Any]) -> str | None:
 
 
 def _member_creator_account(
-    issue: dict[str, Any], members: list[dict[str, Any]]
+    issue: dict[str, Any], member_accounts: set[str]
 ) -> str | None:
     creator = _creator_account(issue)
     if not creator:
         return None
-    accounts = {
-        str(row.get("gitcode_account")).strip()
-        for row in members
-        if row.get("gitcode_account")
-    }
-    if creator in accounts:
+    if creator in member_accounts:
         return creator
     return None
 
@@ -188,9 +183,15 @@ def run() -> None:
     issues = gitcode.list_all_issues()
     now = datetime.now(timezone.utc)
 
+    repository_members = gitcode.list_repository_members()
+    member_accounts = {
+        str(row.get("login") or row.get("username")).strip()
+        for row in repository_members
+        if row.get("login") or row.get("username")
+    }
     schedules = supabase.list_rows("duty_schedules", "?select=duty_date,person_name")
-    members = supabase.list_rows("duty_members", "?select=person_name,gitcode_account")
-    history = _duty_history(schedules, members)
+    duty_members = supabase.list_rows("duty_members", "?select=person_name,gitcode_account")
+    history = _duty_history(schedules, duty_members)
     issue_by_key = {key: issue for issue in issues if (key := _issue_key(issue))}
 
     existing_sync = supabase.list_rows("issue_sync", "?select=issue_key,first_seen_at,assignment_status,assigned_at")
@@ -257,7 +258,7 @@ def run() -> None:
         # A completed row with no current assignee is eligible for repair.
         if row.get("assignment_status") not in {"pending", "complete"}:
             continue
-        creator_account = _member_creator_account(issue, members)
+        creator_account = _member_creator_account(issue, member_accounts)
         assignment_account = creator_account
         if not assignment_account:
             duty_day = _created_day(issue)
@@ -296,8 +297,16 @@ def run() -> None:
     if assigned_any:
         issues = gitcode.list_all_issues()
 
+    # GitCode pagination can occasionally return an overlapping item. Deduplicate
+    # before one bulk upsert, because PostgreSQL rejects duplicate conflict keys
+    # within the same INSERT ... ON CONFLICT command.
+    unique_issues = {
+        key: issue
+        for issue in issues
+        if (key := _issue_key(issue))
+    }
     issue_rows = []
-    for issue in issues:
+    for issue in unique_issues.values():
         key = _issue_key(issue)
         if not key:
             continue

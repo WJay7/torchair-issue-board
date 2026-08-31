@@ -131,6 +131,42 @@ class GitCodeClient:
             raise GitCodeApiError("GitCode returned an unexpected related PR response.")
         return [item for item in payload if isinstance(item, dict)]
 
+    def list_repository_members(self) -> list[dict[str, Any]]:
+        """Fetch every member of the configured GitCode repository."""
+        members: list[dict[str, Any]] = []
+        page = 1
+        while True:
+            query = urlencode(
+                {
+                    "access_token": self.settings.gitcode_token,
+                    "page": page,
+                    "per_page": 100,
+                }
+            )
+            endpoint = (
+                f"{self.settings.gitcode_base_url.rstrip('/')}/repos/"
+                f"{self.settings.gitcode_owner}/{self.settings.gitcode_repo}/collaborators?{query}"
+            )
+            try:
+                payload = self._get_json(endpoint)
+            except HTTPError as error:
+                detail = error.read().decode("utf-8", errors="replace")
+                raise GitCodeApiError(
+                    f"GitCode repository member lookup returned HTTP {error.code}: {detail}"
+                ) from error
+            except URLError as error:
+                raise GitCodeApiError(
+                    f"Could not list GitCode repository members: {error.reason}"
+                ) from error
+            except json.JSONDecodeError as error:
+                raise GitCodeApiError("GitCode returned invalid repository member JSON.") from error
+            if not isinstance(payload, list):
+                raise GitCodeApiError("GitCode returned an unexpected repository member response.")
+            members.extend(item for item in payload if isinstance(item, dict))
+            if len(payload) < 100:
+                return members
+            page += 1
+
     def enable_pr_close_related_issue(self, pr_number: str) -> None:
         query = urlencode({"access_token": self.settings.gitcode_token})
         endpoint = (
