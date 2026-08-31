@@ -104,6 +104,39 @@ def _has_assignee(issue: dict[str, Any]) -> bool:
     return isinstance(assignee, str) and bool(assignee.strip())
 
 
+def _creator_account(issue: dict[str, Any]) -> str | None:
+    """Return the GitCode account that created an Issue, when available."""
+    for field in ("author", "user", "creator", "created_by"):
+        creator = issue.get(field)
+        if isinstance(creator, dict):
+            account = creator.get("login") or creator.get("username")
+            if account:
+                return str(account).strip()
+        elif isinstance(creator, str) and creator.strip():
+            return creator.strip()
+    return None
+
+
+def _member_creator_account(
+    issue: dict[str, Any], members: list[dict[str, Any]]
+) -> str | None:
+    creator = _creator_account(issue)
+    if not creator:
+        return None
+    accounts = {
+        str(row.get("gitcode_account")).strip()
+        for row in members
+        if row.get("gitcode_account")
+    }
+    if creator in accounts:
+        return creator
+    return None
+
+
+def _is_enabled(value: Any) -> bool:
+    return value is True or value in {1, "1", "true", "True"}
+
+
 def _created_day(issue: dict[str, Any]) -> str | None:
     value = issue.get("created_at")
     if not isinstance(value, str):
@@ -178,12 +211,13 @@ def run() -> None:
     assigned_any = False
     valid_accounts: dict[str, bool] = {}
     assignment_count = 0
+    pr_update_count = 0
     for key, row in sync_by_key.items():
         issue = issue_by_key.get(key)
         if not issue:
             continue
         issue_state = str(issue.get("state", "")).lower()
-        if issue_state not in {"open", "opened"} or _has_assignee(issue):
+        if issue_state not in {"open", "opened"}:
             if row.get("assignment_status") == "pending" and _has_assignee(issue):
                 supabase.request(
                     "PATCH",
@@ -192,27 +226,58 @@ def run() -> None:
                     f"?issue_key=eq.{quote(key, safe='')}"
                 )
             continue
+
+        issue_number = str(issue.get("number") or issue.get("id"))
+        try:
+            related_prs = gitcode.list_issue_pull_requests(issue_number)
+            for pull_request in related_prs:
+                if _is_enabled(
+                    pull_request.get("close_related_issue", pull_request.get("close_issue_when_merge"))
+                ):
+                    continue
+                pr_number = pull_request.get("number") or pull_request.get("id")
+                if pr_number is None:
+                    continue
+                gitcode.enable_pr_close_related_issue(str(pr_number))
+                pr_update_count += 1
+        except GitCodeApiError as error:
+            # PR maintenance must not prevent issue synchronization or assignment.
+            print(f"PR close-setting skipped for issue #{issue_number}: {error}")
+
+        if _has_assignee(issue):
+            if row.get("assignment_status") == "pending":
+                supabase.request(
+                    "PATCH",
+                    "issue_sync",
+                    {"assignment_status": "complete", "assigned_at": now.isoformat(timespec="seconds")},
+                    f"?issue_key=eq.{quote(key, safe='')}"
+                )
+            continue
+
         # A completed row with no current assignee is eligible for repair.
         if row.get("assignment_status") not in {"pending", "complete"}:
             continue
-        duty_day = _created_day(issue)
-        duty = history.get(duty_day or "")
-        if not duty or not duty.account:
+        creator_account = _member_creator_account(issue, members)
+        assignment_account = creator_account
+        if not assignment_account:
+            duty_day = _created_day(issue)
+            duty = history.get(duty_day or "")
+            assignment_account = duty.account if duty else None
+        if not assignment_account:
             continue
-        if duty.account not in valid_accounts:
-            valid_accounts[duty.account] = gitcode.user_exists(duty.account)
-        if not valid_accounts[duty.account]:
-            print(f"Assignment skipped for issue #{issue.get('number')}: GitCode user not found: {duty.account}")
+        if assignment_account not in valid_accounts:
+            valid_accounts[assignment_account] = gitcode.user_exists(assignment_account)
+        if not valid_accounts[assignment_account]:
+            print(f"Assignment skipped for issue #{issue.get('number')}: GitCode user not found: {assignment_account}")
             continue
-        number = str(issue.get("number") or issue.get("id"))
         try:
-            gitcode.update_issue_assignee(number, duty.account)
+            gitcode.update_issue_assignee(issue_number, assignment_account)
         except GitCodeApiError as error:
             # Keep the row pending so correcting the duty-member mapping makes
             # the next scheduled run retry the assignment automatically.
             print(
-                f"Assignment skipped for issue #{number} to "
-                f"{duty.account}: {error}"
+                f"Assignment skipped for issue #{issue_number} to "
+                f"{assignment_account}: {error}"
             )
             continue
         supabase.request(
@@ -221,7 +286,7 @@ def run() -> None:
             {
                 "assignment_status": "complete",
                 "assigned_at": now.isoformat(timespec="seconds"),
-                "assigned_to": duty.account,
+                "assigned_to": assignment_account,
             },
             f"?issue_key=eq.{quote(key, safe='')}"
         )
@@ -264,7 +329,10 @@ def run() -> None:
         "dashboard_snapshots",
         [{"id": 1, "payload": snapshot, "generated_at": now.isoformat(timespec="seconds")}],
     )
-    print(f"Synced {len(issues)} issues; assigned={assignment_count}; any={assigned_any}")
+    print(
+        f"Synced {len(issues)} issues; assigned={assignment_count}; "
+        f"pr_close_settings_updated={pr_update_count}; any={assigned_any}"
+    )
 
 
 if __name__ == "__main__":

@@ -109,6 +109,53 @@ class GitCodeClient:
         except URLError as error:
             raise GitCodeApiError(f"Could not update GitCode Issue: {error.reason}") from error
 
+    def list_issue_pull_requests(self, issue_number: str) -> list[dict[str, Any]]:
+        query = urlencode({"access_token": self.settings.gitcode_token})
+        endpoint = (
+            f"{self.settings.gitcode_base_url.rstrip('/')}/repos/"
+            f"{self.settings.gitcode_owner}/{self.settings.gitcode_repo}/issues/"
+            f"{issue_number}/pull_requests?{query}"
+        )
+        try:
+            payload = self._get_json(endpoint)
+        except HTTPError as error:
+            detail = error.read().decode("utf-8", errors="replace")
+            raise GitCodeApiError(
+                f"GitCode related PR lookup returned HTTP {error.code}: {detail}"
+            ) from error
+        except URLError as error:
+            raise GitCodeApiError(f"Could not list GitCode related PRs: {error.reason}") from error
+        except json.JSONDecodeError as error:
+            raise GitCodeApiError("GitCode returned invalid related PR JSON.") from error
+        if not isinstance(payload, list):
+            raise GitCodeApiError("GitCode returned an unexpected related PR response.")
+        return [item for item in payload if isinstance(item, dict)]
+
+    def enable_pr_close_related_issue(self, pr_number: str) -> None:
+        query = urlencode({"access_token": self.settings.gitcode_token})
+        endpoint = (
+            f"{self.settings.gitcode_base_url.rstrip('/')}/repos/"
+            f"{self.settings.gitcode_owner}/{self.settings.gitcode_repo}/pulls/"
+            f"{pr_number}?{query}"
+        )
+        body = json.dumps({"close_related_issue": True}).encode("utf-8")
+        request = Request(
+            endpoint,
+            data=body,
+            method="PATCH",
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            with self._open(request):
+                return
+        except HTTPError as error:
+            detail = error.read().decode("utf-8", errors="replace")
+            raise GitCodeApiError(
+                f"GitCode PR update returned HTTP {error.code}: {detail}"
+            ) from error
+        except URLError as error:
+            raise GitCodeApiError(f"Could not update GitCode PR: {error.reason}") from error
+
     def user_exists(self, username: str) -> bool:
         endpoint = (
             f"{self.settings.gitcode_base_url.rstrip('/')}/users/"
