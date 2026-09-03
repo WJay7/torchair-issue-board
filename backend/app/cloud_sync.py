@@ -98,9 +98,17 @@ def _issue_key(issue: dict[str, Any]) -> str | None:
 def _has_assignee(issue: dict[str, Any]) -> bool:
     assignee = issue.get("assignee") or issue.get("assignees")
     if isinstance(assignee, dict):
-        return bool(assignee.get("login") or assignee.get("name"))
+        # GitCode may return login, username, name, or nest the user object.
+        return bool(
+            assignee.get("login")
+            or assignee.get("username")
+            or assignee.get("user_name")
+            or assignee.get("name")
+            or assignee.get("nick_name")
+            or isinstance(assignee.get("user"), dict)
+        )
     if isinstance(assignee, list):
-        return bool(assignee)
+        return any(_has_assignee({"assignee": item}) for item in assignee)
     return isinstance(assignee, str) and bool(assignee.strip())
 
 

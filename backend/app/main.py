@@ -139,8 +139,32 @@ def dashboard():
             has_assignee = bool(
                 assignee
                 and (
-                    (isinstance(assignee, dict) and (assignee.get("login") or assignee.get("name")))
-                    or (isinstance(assignee, list) and any(assignee))
+                    (
+                        isinstance(assignee, dict)
+                        and (
+                            assignee.get("login")
+                            or assignee.get("username")
+                            or assignee.get("user_name")
+                            or assignee.get("name")
+                            or assignee.get("nick_name")
+                            or isinstance(assignee.get("user"), dict)
+                        )
+                    )
+                    or (
+                        isinstance(assignee, list)
+                        and any(
+                            isinstance(item, dict)
+                            and (
+                                item.get("login")
+                                or item.get("username")
+                                or item.get("user_name")
+                                or item.get("name")
+                                or item.get("nick_name")
+                                or isinstance(item.get("user"), dict)
+                            )
+                            for item in assignee
+                        )
+                    )
                     or (isinstance(assignee, str) and assignee.strip())
                 )
             )
