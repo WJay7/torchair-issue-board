@@ -104,23 +104,39 @@ def _has_assignee(issue: dict[str, Any]) -> bool:
     return isinstance(assignee, str) and bool(assignee.strip())
 
 
-def _creator_account(issue: dict[str, Any]) -> str | None:
-    """Return the GitCode account that created an Issue, when available."""
+def _account_from_entity(entity: Any) -> str | None:
+    if isinstance(entity, dict):
+        account = (
+            entity.get("login")
+            or entity.get("username")
+            or entity.get("user_name")
+            or entity.get("account")
+        )
+        if account:
+            return str(account).strip()
+        nested = entity.get("user") or entity.get("author") or entity.get("creator")
+        if nested is not entity:
+            return _account_from_entity(nested)
+    elif isinstance(entity, str) and entity.strip():
+        return entity.strip()
+    return None
+
+
+def _creator_account(entity: dict[str, Any]) -> str | None:
+    """Return the GitCode account that created an Issue or PR."""
     for field in ("author", "user", "creator", "created_by"):
-        creator = issue.get(field)
-        if isinstance(creator, dict):
-            account = creator.get("login") or creator.get("username")
-            if account:
-                return str(account).strip()
-        elif isinstance(creator, str) and creator.strip():
-            return creator.strip()
+        account = _account_from_entity(entity.get(field))
+        if account:
+            return account
     return None
 
 
 def _member_creator_account(
-    issue: dict[str, Any], member_accounts: set[str]
+    issue: dict[str, Any], member_accounts: set[str], related_prs: list[dict[str, Any]]
 ) -> str | None:
-    creator = _creator_account(issue)
+    # A linked PR is the authoritative source for the creator of an Issue.
+    creator = next((_creator_account(pr) for pr in related_prs if _creator_account(pr)), None)
+    creator = creator or _creator_account(issue)
     if not creator:
         return None
     if creator in member_accounts:
@@ -229,6 +245,7 @@ def run() -> None:
             continue
 
         issue_number = str(issue.get("number") or issue.get("id"))
+        related_prs: list[dict[str, Any]] = []
         try:
             related_prs = gitcode.list_issue_pull_requests(issue_number)
             for pull_request in related_prs:
@@ -258,7 +275,7 @@ def run() -> None:
         # A completed row with no current assignee is eligible for repair.
         if row.get("assignment_status") not in {"pending", "complete"}:
             continue
-        creator_account = _member_creator_account(issue, member_accounts)
+        creator_account = _member_creator_account(issue, member_accounts, related_prs)
         assignment_account = creator_account
         if not assignment_account:
             duty_day = _created_day(issue)

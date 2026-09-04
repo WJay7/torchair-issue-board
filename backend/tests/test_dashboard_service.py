@@ -1,6 +1,7 @@
 from datetime import date
 import unittest
 
+from app.cloud_sync import _has_assignee, _member_creator_account
 from app.config import Settings
 from app.dashboard_service import build_dashboard
 
@@ -17,6 +18,18 @@ SETTINGS = Settings(
 
 
 class DashboardServiceTests(unittest.TestCase):
+    def test_assignee_detection_accepts_gitcode_username_shapes(self):
+        self.assertTrue(_has_assignee({"assignee": {"username": "someone"}}))
+        self.assertTrue(_has_assignee({"assignees": [{"user_name": "someone"}]}))
+        self.assertFalse(_has_assignee({"assignee": {}}))
+
+    def test_linked_pr_creator_takes_priority_over_issue_creator(self):
+        issue = {"author": {"login": "issue-author"}}
+        pull_requests = [{"author": {"username": "pr-author"}}]
+        self.assertEqual(
+            _member_creator_account(issue, {"pr-author"}, pull_requests),
+            "pr-author",
+        )
     def test_uses_state_assignee_and_first_label_for_statistics(self):
         today = date.today().isoformat()
         issues = [
